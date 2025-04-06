@@ -1,0 +1,45 @@
+{
+    "azure": {
+        "tenantId": "",
+        "subscriptionId": "",
+        "resourceGroup": "",
+        "workspaceName": ""
+    },
+    "analysis": {
+        "stalenessThresholds": {
+            "warning": 3,
+            "critical": 7
+        },
+        "excludedTables": [],
+        "excludedRules": []
+    },
+    "visualization": {
+        "networkGraph": {
+            "enabled": true,
+            "format": "svg",
+            "nodeColorScheme": {
+                "active": "#4CAF50",
+                "warning": "#FFC107",
+                "critical": "#F44336",
+                "rule": "#2196F3"
+            }
+        },
+        "heatmap": {
+            "enabled": true,
+            "colorScheme": "RdYlGn"
+        },
+        "powerBI": {
+            "enabled": true,
+            "templatePath": "templates/CoverageAnalysis.pbit"
+        }
+    },
+    "reporting": {
+        "formats": ["csv", "html", "excel"],
+        "outputPath": "output",
+        "includeTimestamp": true
+    },
+    "logging": {
+        "level": "Information",
+        "path": "logs/coverage-analyzer.log"
+    }
+} 

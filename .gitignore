@@ -1,0 +1,35 @@
+# Configuration
+config.json
+
+# Logs
+logs/
+*.log
+
+# Output
+output/
+*.csv
+*.html
+*.xlsx
+*.svg
+*.png
+
+# PowerShell
+*.psd1
+*.psm1
+*.ps1.signature
+
+# Azure
+.azure/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*~
+*.tmp
+*.bak 
