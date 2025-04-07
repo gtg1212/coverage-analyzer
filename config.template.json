@@ -1,9 +1,9 @@
 {
     "azure": {
-        "tenantId": "",
-        "subscriptionId": "",
-        "resourceGroup": "",
-        "workspaceName": ""
+        "tenantId": "9f49ae42-72e9-429b-bab6-4ef9324a672e",
+        "subscriptionId": "8d223c38-245a-49eb-b46d-d238063b4dab",
+        "resourceGroup": "securityresources-rg",
+        "workspaceName": "test-sentinel"
     },
     "analysis": {
         "stalenessThresholds": {
