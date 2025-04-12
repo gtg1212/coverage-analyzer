@@ -1,102 +1,117 @@
 # Sentinel Coverage Analyzer
 
-A comprehensive tool for analyzing Microsoft Sentinel rules and their data source dependencies.
-
-## Overview
-
-This tool analyzes Microsoft Sentinel analytics rules to:
-- Identify which data tables are utilized by each rule
-- Check if data tables are actively receiving logs
-- Flag rules that depend on stale data sources
-- Generate comprehensive coverage reports
-- Visualize relationships between rules and data sources
-
-## Prerequisites
-
-- PowerShell 7.0 or higher
-- Azure PowerShell modules:
-  - Az.Accounts
-  - Az.SecurityInsights
-  - Az.OperationalInsights
-- Required PowerShell visualization modules:
-  - PSGraph
-  - ImportExcel (for reporting)
-
-## Installation
-
-1. Clone this repository
-2. Install required PowerShell modules:
-```powershell
-Install-Module -Name Az.Accounts -Force
-Install-Module -Name Az.SecurityInsights -Force
-Install-Module -Name Az.OperationalInsights -Force
-Install-Module -Name PSGraph -Force
-Install-Module -Name ImportExcel -Force
-```
-
-3. Copy `config.template.json` to `config.json` and update with your settings
-
-## Configuration
-
-Edit `config.json` with your specific settings:
-- Azure Tenant ID
-- Subscription ID
-- Resource Group
-- Workspace Name
-- Staleness thresholds
-- Output preferences
-
-## Usage
-
-1. Connect to Azure:
-```powershell
-.\Connect-SentinelAnalyzer.ps1
-```
-
-2. Run the analysis:
-```powershell
-.\Start-CoverageAnalysis.ps1
-```
-
-3. View reports in the `output` directory
+A PowerShell-based tool for analyzing Microsoft Sentinel analytics rules coverage and data source activity.
 
 ## Features
 
-### Rule Analysis
-- Extracts and parses KQL queries from all active Sentinel rules
-- Identifies referenced data tables
-- Maps dependencies between rules and data sources
+- Retrieves and analyzes all types of Sentinel analytics rules
+- Checks data source activity and staleness
+- Generates visual representations of rule coverage
+- Creates detailed HTML reports
+- Supports visualization of relationships between rules and data sources
 
-### Data Source Activity Monitoring
-- Checks for active data ingestion
-- Flags stale data sources based on configurable thresholds
-- Calculates usage metrics
+## Prerequisites
 
-### Reporting
-- Generates detailed CSV/HTML reports
-- Creates interactive visualizations
-- Exports Power BI templates
-- Produces network graphs of rule dependencies
+- PowerShell 7.0 or later
+- Azure PowerShell modules:
+  - Az.Accounts (2.0.0 or later)
+  - Az.SecurityInsights (2.0.0 or later)
+  - Az.OperationalInsights (2.0.0 or later)
+- Graphviz (for visualization)
+- Required system libraries:
+  - libgdiplus
+  - libc6-dev
 
-### Visualizations
-- Interactive network diagrams
-- Heat maps of data source coverage
-- Dependency graphs
-- Power BI dashboards
+## Installation
+
+1. Clone the repository:
+```powershell
+git clone https://github.com/yourusername/sentinel-coverage-analyzer.git
+cd sentinel-coverage-analyzer
+```
+
+2. Install dependencies:
+```powershell
+./install-dependencies.ps1
+```
+
+3. Configure your environment:
+```powershell
+Copy-Item config.example.json config.json
+# Edit config.json with your Azure environment details
+```
+
+## Configuration
+
+The `config.json` file contains all necessary settings:
+
+```json
+{
+  "azure": {
+    "tenantId": "your-tenant-id",
+    "subscriptionId": "your-subscription-id",
+    "resourceGroup": "your-resource-group",
+    "workspaceName": "your-workspace-name",
+    "workspaceId": null
+  },
+  "analysis": {
+    "stalenessThresholds": {
+      "warning": 7,
+      "critical": 30
+    }
+  },
+  "output": {
+    "path": "output"
+  }
+}
+```
+
+## Usage
+
+Run the analysis:
+```powershell
+./Start-CoverageAnalysis.ps1 -Verbose
+```
+
+The script will:
+1. Connect to your Azure environment
+2. Retrieve all Sentinel analytics rules
+3. Check data source activity
+4. Generate visualizations and reports
 
 ## Output
 
-The tool generates several types of outputs in the `output` directory:
-- Detailed CSV reports
-- Interactive HTML visualizations
-- Network graphs (PNG/SVG)
-- Power BI template files
-- Excel workbooks with coverage metrics
+The tool generates several outputs in the specified output directory:
+- `network-graph.png`: Visualization of rules and their data sources
+- `coverage-heatmap.png`: Heatmap showing rule type coverage
+- `coverage-report.html`: Detailed HTML report
+- Log files in the `logs` directory
+
+## Project Structure
+
+```
+sentinel-coverage-analyzer/
+├── src/
+│   └── modules/           # PowerShell modules
+├── docs/                  # Documentation
+├── tests/                 # Test files
+├── examples/              # Example configurations and queries
+├── install-dependencies.ps1
+├── Start-CoverageAnalysis.ps1
+├── config.example.json
+└── README.md
+```
 
 ## Contributing
 
-Contributions are welcome! Please submit pull requests for any enhancements.
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details on the process for submitting pull requests.
 
 ## License
 
-MIT License - See LICENSE file for details 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Microsoft Sentinel team for their comprehensive documentation
+- PowerShell community for module development guidance
+- Graphviz team for visualization capabilities 

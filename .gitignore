@@ -14,9 +14,13 @@ output/
 *.png
 
 # PowerShell
-*.psd1
-*.psm1
 *.ps1.signature
+*.ps1xml.signature
+*.psm1.signature
+*.psd1.signature
+*.ps1.checksum
+*.psm1.checksum
+*.psd1.checksum
 
 # Azure
 .azure/
