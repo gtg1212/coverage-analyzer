@@ -187,29 +187,121 @@ function Get-KQLTables {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Query
+        [string]$Query,
+        [Parameter(Mandatory = $true)]
+        [PSObject]$Config
     )
 
     try {
+        Write-Verbose "Getting available tables from Log Analytics workspace..."
+        
+        try {
+            # Verify we have the required workspace information
+            if ([string]::IsNullOrEmpty($Config.azure.resourceGroup) -or 
+                [string]::IsNullOrEmpty($Config.azure.workspaceName) -or 
+                [string]::IsNullOrEmpty($Config.azure.subscriptionId)) {
+                Write-Error "Missing required workspace information in config"
+                return @()
+            }
+
+            Write-Verbose "Using workspace: $($Config.azure.workspaceName) in resource group: $($Config.azure.resourceGroup)"
+            
+            # Get current context and verify subscription
+            $context = Get-AzContext
+            if ($null -eq $context -or $context.Subscription.Id -ne $Config.azure.subscriptionId) {
+                Write-Verbose "Setting Azure context to subscription: $($Config.azure.subscriptionId)"
+                $null = Set-AzContext -SubscriptionId $Config.azure.subscriptionId -ErrorAction Stop
+            }
+            
+            # Get tables using Az.OperationalInsights
+            Write-Verbose "Retrieving tables from workspace..."
+            $tables = Get-AzOperationalInsightsTable `
+                -ResourceGroupName $Config.azure.resourceGroup `
+                -WorkspaceName $Config.azure.workspaceName `
+                -ErrorAction Stop
+            
+            $availableTables = $tables | ForEach-Object { $_.Name } | Where-Object { $_ -ne $null -and $_ -ne '' }
+            
+            if ($availableTables.Count -gt 0) {
+                Write-Verbose "Found $($availableTables.Count) tables in workspace"
+                Write-Verbose "Available tables: $($availableTables -join ', ')"
+            } else {
+                Write-Warning "No tables found in workspace"
+                return @()
+            }
+        }
+        catch {
+            Write-Error ("Failed to get tables from workspace: {0}" -f $_.Exception.Message)
+            Write-Verbose $_.Exception.StackTrace
+            return @()
+        }
+
         Write-Verbose "Extracting table names from KQL query..."
-        $tables = @()
-        $knownTables = @(
-            'SecurityAlert', 'SecurityEvent', 'SigninLogs', 'AuditLogs', 'AzureActivity',
-            'CommonSecurityLog', 'OfficeActivity', 'AADNonInteractiveUserSignInLogs',
-            'AzureDiagnostics', 'AzureMetrics', 'BehaviorAnalytics', 'ThreatIntelligenceIndicator'
+        
+        if ($availableTables.Count -eq 0) {
+            Write-Warning "No available tables to match against"
+            return @()
+        }
+
+        # Clean the query by removing comments and extra whitespace
+        $cleanQuery = $Query -replace '//.*$', '' -replace '/\*[\s\S]*?\*/', '' -replace '\s+', ' '
+        Write-Verbose "Cleaned query: $cleanQuery"
+
+        # Common KQL operators that might follow a table name
+        $kqlOperators = @(
+            'where', 'project', 'extend', 'summarize', 'take', 'top', 'limit', 'count',
+            'distinct', 'parse', 'parse-where', 'evaluate', 'join', 'union', 'let',
+            'datatable', 'sort', 'order', 'serialize', 'mv-expand', 'lookup', 'make-series',
+            'partition', 'range', 'scan', 'search', 'find', 'autocluster', 'bag_unpack'
+        ) -join '|'
+
+        # Create patterns for different KQL contexts
+        $patterns = @(
+            # Table after let statements (at start of a new line or after semicolon)
+            "(?i)(?:^|;\s*)(?:let\s+[^;]+;\s*)*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
+            
+            # Standard table reference at start or after pipe
+            "(?i)(?:^|\|\s*)($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
+            
+            # Table in union/join operations (including optional kind=)
+            "(?i)(?:union|join)\s+(?:kind\s*=\s*\w+\s+)?($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s|on\s)",
+            
+            # Table in let statement value
+            "(?i)let\s+\w+\s*=\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
+            
+            # Table in materialized view
+            "(?i)view\s+\w+\s+as\s+($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
+            
+            # Table in lookup/find operations
+            "(?i)(?:lookup|find)\s+in\s+($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s|on\s)",
+            
+            # Table in subqueries
+            "(?i)\(\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
+
+            # Standalone table reference after semicolon
+            "(?i);\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)"
         )
 
-        # Extract table names using regex pattern
-        $pattern = '(?i)\b(' + ($knownTables -join '|') + ')\b'
-        $matches = [regex]::Matches($Query, $pattern)
-        
-        $tables = $matches | ForEach-Object { $_.Value } | Select-Object -Unique
-        Write-Verbose "Found $($tables.Count) tables in query"
-        
-        return $tables
+        $foundTables = @()
+        foreach ($pattern in $patterns) {
+            Write-Verbose "Checking pattern: $pattern"
+            $matches = [regex]::Matches($cleanQuery, $pattern)
+            foreach ($match in $matches) {
+                # Get the captured table name (group 1)
+                $tableName = $match.Groups[1].Value
+                if ($tableName -and -not $foundTables.Contains($tableName)) {
+                    Write-Verbose "Found table '$tableName' at position $($match.Index) using pattern: $pattern"
+                    $foundTables += $tableName
+                }
+            }
+        }
+
+        Write-Verbose "Found $($foundTables.Count) unique tables in query: $($foundTables -join ', ')"
+        return $foundTables
     }
     catch {
         Write-Error "Failed to extract table names: $_"
+        Write-Verbose "Stack trace: $($_.ScriptStackTrace)"
         return @()
     }
 }

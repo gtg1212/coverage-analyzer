@@ -46,7 +46,7 @@ try {
         # Get tables from KQL query if present
         $tables = @()
         if (-not [string]::IsNullOrWhiteSpace($rule.Query)) {
-            $tables = Get-KQLTables -Query $rule.Query
+            $tables = Get-KQLTables -Query $rule.Query -Config $config
         }
         
         # Add tables to rule object
