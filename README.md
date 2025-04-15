@@ -26,7 +26,7 @@ A PowerShell-based tool for analyzing Microsoft Sentinel analytics rules coverag
 
 1. Clone the repository:
 ```powershell
-git clone https://github.com/yourusername/sentinel-coverage-analyzer.git
+git clone https://github.com/gtg1212/coverage-analyzer
 cd sentinel-coverage-analyzer
 ```
 
@@ -70,7 +70,7 @@ The `config.json` file contains all necessary settings:
 
 Run the analysis:
 ```powershell
-./Start-CoverageAnalysis.ps1 -Verbose
+./Start-CoverageAnalysis.ps1
 ```
 
 The script will:
@@ -94,24 +94,14 @@ sentinel-coverage-analyzer/
 ├── src/
 │   └── modules/           # PowerShell modules
 ├── docs/                  # Documentation
-├── tests/                 # Test files
 ├── examples/              # Example configurations and queries
 ├── install-dependencies.ps1
 ├── Start-CoverageAnalysis.ps1
+├── Connect-SentinelAnalyzer.ps1
 ├── config.example.json
 └── README.md
 ```
 
-## Contributing
-
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) for details on the process for submitting pull requests.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Microsoft Sentinel team for their comprehensive documentation
-- PowerShell community for module development guidance
-- Graphviz team for visualization capabilities 
