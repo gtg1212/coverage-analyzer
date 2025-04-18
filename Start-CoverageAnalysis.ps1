@@ -76,8 +76,10 @@ try {
     $heatmap = New-CoverageHeatmap -CoverageData $ruleData -Config $config
     
     Write-Host "Generating reports..."
-    $report = Export-CoverageReport -AnalysisResults $ruleData -Config $config
-    Write-Host "Coverage report created: $report"
+    $reports = Export-CoverageReport -AnalysisResults $ruleData -Config $config
+    Write-Host "Coverage reports created:"
+    Write-Host "  HTML Report: $($reports.HtmlReport)"
+    Write-Host "  Excel Report: $($reports.ExcelReport)"
     
     # Display summary
     $activeRules = $ruleData.Rules | Where-Object { $_.Enabled }

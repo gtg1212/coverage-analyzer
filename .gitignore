@@ -8,10 +8,8 @@ logs/
 # Output
 output/
 *.csv
-*.html
-*.xlsx
 *.svg
-*.png
+
 
 # PowerShell
 *.ps1.signature
