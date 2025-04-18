@@ -108,12 +108,97 @@ function Export-CoverageReport {
 </html>
 "@
         
-        # Save the report
-        $outputPath = Join-Path $Config.output.path "coverage-report.html"
-        Write-Verbose "Saving report to: $outputPath"
-        $html | Out-File -FilePath $outputPath -Encoding UTF8
+        # Save the HTML report
+        $htmlPath = Join-Path $Config.output.path "coverage-report.html"
+        Write-Verbose "Saving HTML report to: $htmlPath"
+        $html | Out-File -FilePath $htmlPath -Encoding UTF8
+
+        # Generate Excel report
+        Write-Verbose "Generating Excel report..."
+        $excelPath = Join-Path $Config.output.path "coverage-report.xlsx"
         
-        return $outputPath
+        # Create summary data
+        $summaryData = @(
+            [PSCustomObject]@{
+                "Metric" = "Total Rules"
+                "Value" = $AnalysisResults.Rules.Count
+            },
+            [PSCustomObject]@{
+                "Metric" = "Active Rules"
+                "Value" = $activeRules.Count
+            },
+            [PSCustomObject]@{
+                "Metric" = "Tables Used"
+                "Value" = $AnalysisResults.Tables.Count
+            },
+            [PSCustomObject]@{
+                "Metric" = "Active Tables"
+                "Value" = $activeTables.Count
+            }
+        )
+
+        # Create rules data
+        $rulesData = $AnalysisResults.Rules | Select-Object @(
+            @{N='Name';E={$_.DisplayName}},
+            @{N='Type';E={$_.RuleType}},
+            @{N='Status';E={if ($_.Enabled) { "Enabled" } else { "Disabled" }}},
+            @{N='Tables';E={$_.Tables -join ", "}}
+        )
+
+        # Create tables data
+        $tablesData = $AnalysisResults.Tables.Keys | ForEach-Object {
+            $isActive = $AnalysisResults.Tables[$_]
+            [PSCustomObject]@{
+                'Name' = $_
+                'Status' = if ($isActive) { "Active" } else { "Inactive" }
+                'Last Record' = if ($isActive) { "Within 7 days" } else { "N/A" }
+                'Days Since Last Record' = if ($isActive) { "< 7" } else { "" }
+            }
+        }
+
+        # Export to Excel with multiple worksheets
+        $excelParams = @{
+            Path = $excelPath
+            AutoSize = $true
+            AutoFilter = $true
+            BoldTopRow = $true
+            FreezeTopRow = $true
+            WorksheetName = "Summary"
+            TableName = "SummaryTable"
+        }
+
+        # Export Summary sheet
+        $summaryData | Export-Excel @excelParams
+
+        # Export Rules sheet
+        $rulesData | Export-Excel -Path $excelPath -WorksheetName "Rules" -TableName "RulesTable" -Append
+
+        # Export Tables sheet
+        $tablesData | Export-Excel -Path $excelPath -WorksheetName "Tables" -TableName "TablesTable" -Append
+
+        # Add conditional formatting
+        $excel = Open-ExcelPackage -Path $excelPath
+
+        # Format Rules sheet
+        $rulesSheet = $excel.Workbook.Worksheets["Rules"]
+        Add-ConditionalFormatting -Worksheet $rulesSheet -Range "C:C" -RuleType Equal -ConditionValue "Enabled" -BackgroundColor Green -ForegroundColor White
+        Add-ConditionalFormatting -Worksheet $rulesSheet -Range "C:C" -RuleType Equal -ConditionValue "Disabled" -BackgroundColor Red -ForegroundColor White
+
+        # Format Tables sheet
+        $tablesSheet = $excel.Workbook.Worksheets["Tables"]
+        Add-ConditionalFormatting -Worksheet $tablesSheet -Range "B:B" -RuleType Equal -ConditionValue "Active" -BackgroundColor Green -ForegroundColor White
+        Add-ConditionalFormatting -Worksheet $tablesSheet -Range "B:B" -RuleType Equal -ConditionValue "Inactive" -BackgroundColor Red -ForegroundColor White
+
+        # Save and close Excel
+        Close-ExcelPackage $excel
+
+        Write-Verbose "Excel report saved to: $excelPath"
+        
+        # Return both file paths
+        return @{
+            HtmlReport = $htmlPath
+            ExcelReport = $excelPath
+        }
     }
     catch {
         Write-Error "Failed to generate coverage report: $_"

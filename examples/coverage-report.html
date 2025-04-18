@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sentinel Coverage Analysis Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2, h3 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .summary { margin-bottom: 20px; }
+        .warning { color: #ff9900; }
+        .error { color: #ff0000; }
+        .success { color: #009900; }
+    </style>
+</head>
+<body>
+    <h1>Sentinel Coverage Analysis Report</h1>
+    <p>Generated on: 2025-04-17 22:14:49</p>
+    
+    <div class="summary">
+        <h2>Summary</h2>
+        <p>Total Rules: 6</p>
+        <p>Active Rules: 6</p>
+        <p>Tables Used: 4</p>
+        <p>Active Tables: 1</p>
+    </div>
+    
+    <h2>Rules</h2>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Tables</th>
+        </tr>        <tr>
+            <td>Threat Essentials - Mail redirect via ExO transport rule</td>
+            <td>Scheduled Analytics</td>
+            <td class="success">Enabled</td>
+            <td>OfficeActivity</td>
+        </tr>        <tr>
+            <td>Threat Essentials - Mass Cloud resource deletions Time Series Anomaly</td>
+            <td>Scheduled Analytics</td>
+            <td class="success">Enabled</td>
+            <td>AzureActivity</td>
+        </tr>        <tr>
+            <td>Threat Essentials - NRT User added to Microsoft Entra ID Privileged Groups</td>
+            <td>Near Real Time</td>
+            <td class="success">Enabled</td>
+            <td>AuditLogs</td>
+        </tr>        <tr>
+            <td>Threat Essentials - Multiple admin membership removals from newly created admin.</td>
+            <td>Scheduled Analytics</td>
+            <td class="success">Enabled</td>
+            <td>AuditLogs</td>
+        </tr>        <tr>
+            <td>Threat Essentials - User Assigned Privileged Role</td>
+            <td>Scheduled Analytics</td>
+            <td class="success">Enabled</td>
+            <td>AuditLogs</td>
+        </tr>        <tr>
+            <td>Test Rule Custom Table</td>
+            <td>Scheduled Analytics</td>
+            <td class="success">Enabled</td>
+            <td>TEST_TABLE_CL</td>
+        </tr>    </table>
+    
+    <h2>Tables</h2>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Last Record</th>
+            <th>Days Since Last Record</th>
+        </tr>        <tr>
+            <td>OfficeActivity</td>
+            <td class="error">Inactive</td>
+            <td>N/A</td>
+            <td></td>
+        </tr>        <tr>
+            <td>AzureActivity</td>
+            <td class="error">Inactive</td>
+            <td>N/A</td>
+            <td></td>
+        </tr>        <tr>
+            <td>TEST_TABLE_CL</td>
+            <td class="error">Inactive</td>
+            <td>N/A</td>
+            <td></td>
+        </tr>        <tr>
+            <td>AuditLogs</td>
+            <td class="success">Active</td>
+            <td>Within 7 days</td>
+            <td>< 7</td>
+        </tr>    </table>
+</body>
+</html>
