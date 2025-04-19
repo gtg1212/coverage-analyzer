@@ -1,22 +1,22 @@
 # Detect OS
-$isWindows = $IsWindows -or ($PSVersionTable.PSVersion.Major -lt 6)
-$isLinux = $IsLinux
-Write-Host "Detected OS: $(if ($isWindows) { 'Windows' } else { 'Linux' })"
+$isWindowsOS = ($PSVersionTable.PSVersion.Major -lt 6) -or ($PSVersionTable.Platform -eq 'Win32NT') -or $IsWindows
+$isLinuxOS = $IsLinux -or ($PSVersionTable.Platform -eq 'Unix')
+Write-Host "Detected OS: $(if ($isWindowsOS) { 'Windows' } else { 'Linux' })"
 
 # Install system dependencies
 Write-Host "`nInstalling system dependencies..."
-if ($isLinux) {
+if ($isLinuxOS) {
     Write-Host "Installing Linux dependencies..."
     try {
         sudo apt-get -y update
         sudo apt-get install -y --no-install-recommends libgdiplus libc6-dev graphviz
     }
     catch {
-        Write-Error "Failed to install Linux dependencies: $_"
+        Write-Error ("Failed to install Linux dependencies: " + $_.Exception.Message)
         Write-Host "Please manually install: libgdiplus, libc6-dev, and graphviz"
     }
 }
-elseif ($isWindows) {
+elseif ($isWindowsOS) {
     Write-Host "Installing Windows dependencies..."
     
     # Check if Chocolatey is installed
@@ -28,7 +28,7 @@ elseif ($isWindows) {
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
         }
         catch {
-            Write-Error "Failed to install Chocolatey: $_"
+            Write-Error ("Failed to install Chocolatey: " + $_.Exception.Message)
             Write-Host "Please install Chocolatey manually from https://chocolatey.org/install"
             Write-Host "Then install Graphviz using: choco install graphviz"
             return
@@ -41,7 +41,7 @@ elseif ($isWindows) {
         refreshenv
     }
     catch {
-        Write-Error "Failed to install Graphviz: $_"
+        Write-Error ("Failed to install Graphviz: " + $_.Exception.Message)
         Write-Host "Please install Graphviz manually from https://graphviz.org/download/"
     }
 }
@@ -54,6 +54,13 @@ else {
 # Install PowerShell modules
 Write-Host "`nInstalling PowerShell modules..."
 
+# Register PSGallery if not already registered
+if (-not (Get-PSRepository -Name "PSGallery" -ErrorAction SilentlyContinue)) {
+    Write-Host "Registering PSGallery repository..."
+    Register-PSRepository -Default
+    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+}
+
 # Install Azure modules
 Write-Host "Installing Azure PowerShell modules..."
 $azureModules = @(
@@ -64,11 +71,20 @@ $azureModules = @(
 
 foreach ($module in $azureModules) {
     try {
-        Install-Module -Name $module.Name -RequiredVersion $module.Version -Force -AllowClobber -Scope CurrentUser
-        Write-Host "Installed $($module.Name) version $($module.Version)"
+        $existingModule = Get-Module -ListAvailable -Name $module.Name
+        if ($existingModule) {
+            Write-Host ("Module " + $module.Name + " is already installed with version " + $existingModule.Version)
+            if ($existingModule.Version -lt $module.Version) {
+                Write-Host ("Updating " + $module.Name + " to version " + $module.Version)
+                Install-Module -Name $module.Name -RequiredVersion $module.Version -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
+            }
+        } else {
+            Install-Module -Name $module.Name -RequiredVersion $module.Version -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
+            Write-Host ("Installed " + $module.Name + " version " + $module.Version)
+        }
     }
     catch {
-        Write-Error "Failed to install $($module.Name): $_"
+        Write-Error ("Failed to install " + $module.Name + ": " + $_.Exception.Message)
     }
 }
 
@@ -81,19 +97,29 @@ $otherModules = @(
 
 foreach ($module in $otherModules) {
     try {
-        Install-Module -Name $module -Force -AllowClobber -Scope CurrentUser
-        Write-Host "Installed $module"
+        $existingModule = Get-Module -ListAvailable -Name $module
+        if (-not $existingModule) {
+            Install-Module -Name $module -Force -AllowClobber -Scope CurrentUser -Repository PSGallery
+            Write-Host ("Installed " + $module)
+        } else {
+            Write-Host ("Module " + $module + " is already installed with version " + $existingModule.Version)
+        }
     }
     catch {
-        Write-Error "Failed to install $module: $_"
+        Write-Error ("Failed to install " + $module + ": " + $_.Exception.Message)
     }
 }
 
 # Verify Graphviz installation
 Write-Host "`nVerifying Graphviz installation..."
 try {
-    $dotVersion = dot -V
-    Write-Host "Graphviz version: $dotVersion"
+    $dotOutput = (dot -V) 2>&1
+    if ($dotOutput -match 'version (\d+\.\d+\.\d+)') {
+        $dotVersion = $matches[1]
+        Write-Host ("Graphviz version: " + $dotVersion)
+    } else {
+        Write-Host ("Graphviz version output: " + $dotOutput)
+    }
 }
 catch {
     Write-Error "Graphviz (dot) not found in PATH. Please ensure Graphviz is installed and added to your PATH"
@@ -105,12 +131,12 @@ $allModules = $azureModules.Name + $otherModules
 $missingModules = @()
 
 foreach ($module in $allModules) {
-    $installedModule = Get-Module -ListAvailable -Name $module
+    $installedModule = Get-Module -ListAvailable -Name $module | Sort-Object Version -Descending | Select-Object -First 1
     if ($installedModule) {
-        Write-Host "$module version $($installedModule.Version) is installed"
+        Write-Host ("$module version " + $installedModule.Version + " is installed")
     }
     else {
-        Write-Error "Failed to verify installation of $module"
+        Write-Error ("Failed to verify installation of " + $module)
         $missingModules += $module
     }
 }
@@ -118,7 +144,7 @@ foreach ($module in $allModules) {
 # Final status
 if ($missingModules.Count -gt 0) {
     Write-Warning "`nSome dependencies failed to install:"
-    $missingModules | ForEach-Object { Write-Host "- $_" }
+    $missingModules | ForEach-Object { Write-Host ("- " + $_) }
     Write-Host "Please install missing dependencies manually"
 }
 else {
