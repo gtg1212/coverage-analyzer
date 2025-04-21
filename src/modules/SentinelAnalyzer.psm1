@@ -156,6 +156,16 @@ function Get-SentinelRules {
                 $type -in @('Fusion', 'ML Behavior Analytics', 'Microsoft Security')
             }
 
+            # Extract tables from query
+            $tables = @()
+            if (-not [string]::IsNullOrWhiteSpace($query)) {
+                Write-Verbose "Extracting tables from query for rule: $($rule.DisplayName)"
+                $queryTables = Get-KQLTables -Query $query -Config $Config
+                if ($queryTables) {
+                    $tables = $queryTables.Keys | Sort-Object
+                }
+            }
+
             $ruleInfo += [PSCustomObject]@{
                 DisplayName = $rule.DisplayName
                 Name = $rule.Name
@@ -163,6 +173,7 @@ function Get-SentinelRules {
                 Query = $query
                 RuleType = $type
                 RawKind = $rawKind
+                Tables = $tables
             }
         }
 
@@ -229,78 +240,109 @@ function Get-KQLTables {
                 Write-Warning "No tables found in workspace"
                 return @()
             }
+
+            # Extract table names from the query first
+            Write-Verbose "Extracting table names from KQL query..."
+            
+            if ([string]::IsNullOrWhiteSpace($Query)) {
+                Write-Verbose "Query is empty, returning empty table list"
+                return @()
+            }
+
+            # Clean the query by removing comments and extra whitespace
+            $cleanQuery = $Query -replace '//.*$', '' -replace '/\*[\s\S]*?\*/', '' -replace '\s+', ' '
+            Write-Verbose "Cleaned query: $cleanQuery"
+
+            # Extract table names from the query
+            $foundTables = @()
+            
+            # Common KQL operators that might follow a table name
+            $operators = @(
+                '\|', 'where', 'project', 'extend', 'summarize', 'count', 'take', 'top',
+                'sort', 'order', 'join', 'union', 'let', 'datatable', '\r', '\n', ';'
+            ) -join '|'
+            
+            # Handle let statements
+            $letMatches = [regex]::Matches($cleanQuery, 'let\s+(\w+)\s*=\s*table\("([^"]+)"\)')
+            foreach ($match in $letMatches) {
+                $tableName = $match.Groups[2].Value
+                if ($availableTables -contains $tableName) {
+                    $foundTables += $tableName
+                }
+            }
+            
+            # Handle direct table references
+            $tableMatches = [regex]::Matches($cleanQuery, '(?:^|\s+)(\w+)(?:\s*(?:' + $operators + '))')
+            foreach ($match in $tableMatches) {
+                $tableName = $match.Groups[1].Value
+                if ($availableTables -contains $tableName -and $tableName -notin $foundTables) {
+                    $foundTables += $tableName
+                }
+            }
+
+            # Only check activity for tables found in the query
+            $tableActivity = @{}
+            foreach ($tableName in $foundTables) {
+                Write-Verbose "Checking activity for table: $tableName"
+                
+                # First check if table has TimeGenerated column
+                $schemaQuery = "$tableName | getschema | where ColumnName == 'TimeGenerated' | count"
+                
+                try {
+                    $schemaResult = Invoke-AzOperationalInsightsQuery `
+                        -WorkspaceId $Config.azure.workspaceId `
+                        -Query $schemaQuery `
+                        -ErrorAction Stop
+
+                    if ($schemaResult.Results[0].Count -eq 0) {
+                        Write-Verbose "Table $tableName does not have TimeGenerated column, marking as active"
+                        $tableActivity[$tableName] = $true
+                        continue
+                    }
+
+                    $activityQuery = "
+                        $tableName
+                        | where TimeGenerated > ago(7d)
+                        | take 1"
+                    
+                    $result = Invoke-AzOperationalInsightsQuery `
+                        -WorkspaceId $Config.azure.workspaceId `
+                        -Query $activityQuery `
+                        -ErrorAction Stop
+                    
+                    $isActive = $result.Results.Count -gt 0
+                    $tableActivity[$tableName] = $isActive
+                    Write-Verbose "Table $tableName is $(if ($isActive) { 'active' } else { 'inactive' })"
+                }
+                catch {
+                    if ($_.Exception.Message -like "*BadRequest*") {
+                        Write-Verbose "Table $tableName is not queryable, marking as active"
+                        $tableActivity[$tableName] = $true
+                    }
+                    else {
+                        Write-Warning "Failed to check activity for table $tableName : $_"
+                        $tableActivity[$tableName] = $false
+                    }
+                }
+            }
+            
+            # Create result objects with activity status
+            $result = @{}
+            foreach ($table in $foundTables) {
+                $result[$table] = $tableActivity[$table]
+            }
+            
+            Write-Verbose "Found tables: $($foundTables -join ', ')"
+            return $result
         }
         catch {
             Write-Error ("Failed to get tables from workspace: {0}" -f $_.Exception.Message)
             Write-Verbose $_.Exception.StackTrace
             return @()
         }
-
-        Write-Verbose "Extracting table names from KQL query..."
-        
-        if ($availableTables.Count -eq 0) {
-            Write-Warning "No available tables to match against"
-            return @()
-        }
-
-        # Clean the query by removing comments and extra whitespace
-        $cleanQuery = $Query -replace '//.*$', '' -replace '/\*[\s\S]*?\*/', '' -replace '\s+', ' '
-        Write-Verbose "Cleaned query: $cleanQuery"
-
-        # Common KQL operators that might follow a table name
-        $kqlOperators = @(
-            'where', 'project', 'extend', 'summarize', 'take', 'top', 'limit', 'count',
-            'distinct', 'parse', 'parse-where', 'evaluate', 'join', 'union', 'let',
-            'datatable', 'sort', 'order', 'serialize', 'mv-expand', 'lookup', 'make-series',
-            'partition', 'range', 'scan', 'search', 'find', 'autocluster', 'bag_unpack'
-        ) -join '|'
-
-        # Create patterns for different KQL contexts
-        $patterns = @(
-            # Table after let statements (at start of a new line or after semicolon)
-            "(?i)(?:^|;\s*)(?:let\s+[^;]+;\s*)*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
-            
-            # Standard table reference at start or after pipe
-            "(?i)(?:^|\|\s*)($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
-            
-            # Table in union/join operations (including optional kind=)
-            "(?i)(?:union|join)\s+(?:kind\s*=\s*\w+\s+)?($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s|on\s)",
-            
-            # Table in let statement value
-            "(?i)let\s+\w+\s*=\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
-            
-            # Table in materialized view
-            "(?i)view\s+\w+\s+as\s+($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
-            
-            # Table in lookup/find operations
-            "(?i)(?:lookup|find)\s+in\s+($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s|on\s)",
-            
-            # Table in subqueries
-            "(?i)\(\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)",
-
-            # Standalone table reference after semicolon
-            "(?i);\s*($($availableTables -join '|'))\s*(?:\||$|\s+(?:$kqlOperators)\s)"
-        )
-
-        $foundTables = @()
-        foreach ($pattern in $patterns) {
-            Write-Verbose "Checking pattern: $pattern"
-            $matches = [regex]::Matches($cleanQuery, $pattern)
-            foreach ($match in $matches) {
-                # Get the captured table name (group 1)
-                $tableName = $match.Groups[1].Value
-                if ($tableName -and -not $foundTables.Contains($tableName)) {
-                    Write-Verbose "Found table '$tableName' at position $($match.Index) using pattern: $pattern"
-                    $foundTables += $tableName
-                }
-            }
-        }
-
-        Write-Verbose "Found $($foundTables.Count) unique tables in query: $($foundTables -join ', ')"
-        return $foundTables
     }
     catch {
-        Write-Error "Failed to extract table names: $_"
+        Write-Error "Failed to process query for tables: $_"
         Write-Verbose "Stack trace: $($_.ScriptStackTrace)"
         return @()
     }

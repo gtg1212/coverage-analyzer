@@ -6,10 +6,10 @@
     ModuleVersion = '1.0.0'
     
     # ID used to uniquely identify this module
-    GUID = '12345678-1234-1234-1234-123456789012'
+    GUID = '149e7765a-1319-44df-8f1a-20b4c0c8e460'
     
     # Author of this module
-    Author = 'Your Name'
+    Author = 'Gregory Gonzalez'
     
     # Company or vendor of this module
     CompanyName = 'Unknown'
@@ -18,17 +18,16 @@
     Copyright = '(c) 2024. All rights reserved.'
     
     # Description of the functionality provided by this module
-    Description = 'Analyzes Microsoft Sentinel rule coverage and data source activity'
+    Description = 'Analyzes Microsoft Sentinel coverage and generates reports'
     
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '7.0'
     
     # Modules that must be imported into the global environment prior to importing this module
     RequiredModules = @(
-        @{ ModuleName = 'Az.Accounts'; ModuleVersion = '2.12.1' },
+        @{ ModuleName = 'Az.Accounts'; ModuleVersion = '2.0.0' },
         @{ ModuleName = 'Az.SecurityInsights'; ModuleVersion = '2.0.0' },
-        @{ ModuleName = 'Az.OperationalInsights'; ModuleVersion = '3.1.0' },
-        @{ ModuleName = 'PSGraph'; ModuleVersion = '2.1.38' }
+        @{ ModuleName = 'Az.OperationalInsights'; ModuleVersion = '2.0.0' }
     )
     
     # Script files (.ps1) that are run in the caller's environment prior to importing this module.
@@ -43,23 +42,18 @@
     # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
     NestedModules = @(
         'Visualization.psm1',
-        'Reporting.psm1'
+        'Reporting.psm1',
+        'AutomationAnalyzer.psm1'
     )
     
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
     FunctionsToExport = @(
-        # Core functions
-        'Import-AnalyzerConfig',
-        'Connect-ToAzure',
-        'Get-WorkspaceId',
         'Get-SentinelRules',
         'Get-KQLTables',
-        'Test-TableActivity',
-        # Visualization functions
         'New-NetworkGraph',
         'New-CoverageHeatmap',
-        # Reporting functions
-        'Export-CoverageReport'
+        'Export-CoverageReport',
+        'Get-AutomationRules'
     )
     
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
@@ -74,11 +68,11 @@
     # Private data to pass to the module specified in RootModule/ModuleToProcess
     PrivateData = @{
         PSData = @{
-            # Tags applied to this module
-            Tags = @('Azure', 'Sentinel', 'Security', 'Analysis')
+            # Tags applied to this module for module discovery
+            Tags = @('Sentinel', 'Security', 'Analysis')
             
             # License URI for this module
-            LicenseUri = 'https://github.com/yourusername/coverage-analyzer/blob/main/LICENSE'
+            LicenseUri = 'https://opensource.org/licenses/MIT'
             
             # Project URI for this module
             ProjectUri = 'https://github.com/yourusername/coverage-analyzer'

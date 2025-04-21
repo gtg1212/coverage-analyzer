@@ -22,6 +22,7 @@ function Export-CoverageReport {
         # Calculate summary statistics
         $activeRules = $AnalysisResults.Rules | Where-Object { $_.Enabled }
         $activeTables = $AnalysisResults.Tables.Values | Where-Object { $_ -eq $true }
+        $activeAutomationRules = $AnalysisResults.AutomationRules | Where-Object { $_.Enabled }
         
         # Generate HTML content
         $html = @"
@@ -52,6 +53,8 @@ function Export-CoverageReport {
         <p>Active Rules: $($activeRules.Count)</p>
         <p>Tables Used: $($AnalysisResults.Tables.Count)</p>
         <p>Active Tables: $($activeTables.Count)</p>
+        <p>Automation Rules: $($AnalysisResults.AutomationRules.Count)</p>
+        <p>Active Automation Rules: $($activeAutomationRules.Count)</p>
     </div>
     
     <h2>Rules</h2>
@@ -104,6 +107,33 @@ function Export-CoverageReport {
         
         $html += @"
     </table>
+
+    <h2>Automation Rules</h2>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>Order</th>
+            <th>Status</th>
+            <th>Triggering Rules</th>
+            <th>Actions</th>
+        </tr>
+"@
+        
+        foreach ($rule in $AnalysisResults.AutomationRules) {
+            $statusClass = if ($rule.Enabled) { "success" } else { "error" }
+            $html += @"
+        <tr>
+            <td>$($rule.AutomationRuleName)</td>
+            <td>$($rule.Order)</td>
+            <td class="$statusClass">$(if ($rule.Enabled) { "Enabled" } else { "Disabled" })</td>
+            <td>$($rule.TriggeringRules -join "<br>")</td>
+            <td>$($rule.Actions -join "<br>")</td>
+        </tr>
+"@
+        }
+        
+        $html += @"
+    </table>
 </body>
 </html>
 "@
@@ -134,6 +164,14 @@ function Export-CoverageReport {
             [PSCustomObject]@{
                 "Metric" = "Active Tables"
                 "Value" = $activeTables.Count
+            },
+            [PSCustomObject]@{
+                "Metric" = "Automation Rules"
+                "Value" = $AnalysisResults.AutomationRules.Count
+            },
+            [PSCustomObject]@{
+                "Metric" = "Active Automation Rules"
+                "Value" = $activeAutomationRules.Count
             }
         )
 
@@ -156,6 +194,15 @@ function Export-CoverageReport {
             }
         }
 
+        # Create automation rules data
+        $automationData = $AnalysisResults.AutomationRules | Select-Object @(
+            @{N='Name';E={$_.AutomationRuleName}},
+            'Order',
+            @{N='Status';E={if ($_.Enabled) { "Enabled" } else { "Disabled" }}},
+            @{N='Triggering Rules';E={$_.TriggeringRules -join "`n"}},
+            @{N='Actions';E={$_.Actions -join "`n"}}
+        )
+
         # Export to Excel with multiple worksheets
         $excelParams = @{
             Path = $excelPath
@@ -176,6 +223,9 @@ function Export-CoverageReport {
         # Export Tables sheet
         $tablesData | Export-Excel -Path $excelPath -WorksheetName "Tables" -TableName "TablesTable" -Append
 
+        # Export Automation Rules sheet
+        $automationData | Export-Excel -Path $excelPath -WorksheetName "Automation" -TableName "AutomationTable" -Append
+
         # Add conditional formatting
         $excel = Open-ExcelPackage -Path $excelPath
 
@@ -188,6 +238,11 @@ function Export-CoverageReport {
         $tablesSheet = $excel.Workbook.Worksheets["Tables"]
         Add-ConditionalFormatting -Worksheet $tablesSheet -Range "B:B" -RuleType Equal -ConditionValue "Active" -BackgroundColor Green -ForegroundColor White
         Add-ConditionalFormatting -Worksheet $tablesSheet -Range "B:B" -RuleType Equal -ConditionValue "Inactive" -BackgroundColor Red -ForegroundColor White
+
+        # Format Automation sheet
+        $automationSheet = $excel.Workbook.Worksheets["Automation"]
+        Add-ConditionalFormatting -Worksheet $automationSheet -Range "C:C" -RuleType Equal -ConditionValue "Enabled" -BackgroundColor Green -ForegroundColor White
+        Add-ConditionalFormatting -Worksheet $automationSheet -Range "C:C" -RuleType Equal -ConditionValue "Disabled" -BackgroundColor Red -ForegroundColor White
 
         # Save and close Excel
         Close-ExcelPackage $excel

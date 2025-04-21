@@ -12,9 +12,10 @@ using module ./src/modules/SentinelAnalyzer.psm1
 param()
 
 # Import modules
-Import-Module "$PSScriptRoot/src/modules/SentinelAnalyzer.psd1" -Force
-Import-Module "$PSScriptRoot/src/modules/Visualization.psm1" -Force
-Import-Module "$PSScriptRoot/src/modules/Reporting.psm1" -Force
+Import-Module "$PSScriptRoot/src/modules/SentinelAnalyzer.psm1"
+Import-Module "$PSScriptRoot/src/modules/Visualization.psm1"
+Import-Module "$PSScriptRoot/src/modules/Reporting.psm1"
+Import-Module "$PSScriptRoot/src/modules/AutomationAnalyzer.psm1"
 
 # Start transcript logging
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -24,44 +25,40 @@ Start-Transcript -Path $logFile
 
 try {
     Write-Host "Loading configuration..."
-    $config = Import-AnalyzerConfig -ConfigPath "$PSScriptRoot/config.json"
+    $configPath = Join-Path $PSScriptRoot "config.json"
+    $config = Get-Content $configPath | ConvertFrom-Json
     
     Write-Host "Using workspace ID from config: $($config.azure.workspaceId)"
     
     Write-Host "Connecting to Azure..."
-    Connect-ToAzure -Config $config
+    Connect-AzAccount -Tenant $config.azure.tenantId -Subscription $config.azure.subscriptionId
     
-    Write-Host "Retrieving Sentinel rules..."
+    Write-Host "Getting Sentinel rules..."
     $rules = Get-SentinelRules -Config $config
     
-    Write-Host "Analyzing rules and their data sources..."
-    $ruleData = @{
-        Rules = @()
-        Tables = @{}
-    }
-    
+    Write-Host "Getting tables used by rules..."
+    # Get tables from each rule's query
+    $tables = @{}
     foreach ($rule in $rules) {
-        Write-Verbose "Processing rule: $($rule.DisplayName) (Type: $($rule.RuleType))"
-        
-        # Get tables from KQL query if present
-        $tables = @()
-        if (-not [string]::IsNullOrWhiteSpace($rule.Query)) {
-            $tables = Get-KQLTables -Query $rule.Query -Config $config
-        }
-        
-        # Add tables to rule object
-        $rule | Add-Member -MemberType NoteProperty -Name "Tables" -Value $tables
-        
-        # Check table activity
-        foreach ($table in $tables) {
-            if (-not $ruleData.Tables.ContainsKey($table)) {
-                $activity = Test-TableActivity -TableName $table -Config $config
-                $ruleData.Tables[$table] = $activity
+        if ($rule.Query) {
+            Write-Verbose "Processing query for rule: $($rule.DisplayName)"
+            $ruleTables = Get-KQLTables -Query $rule.Query -Config $config
+            foreach ($table in $ruleTables.Keys) {
+                if (-not $tables.ContainsKey($table)) {
+                    $tables[$table] = $ruleTables[$table]
+                }
             }
         }
-        
-        Write-Host "Analyzed rule: $($rule.DisplayName) (Type: $($rule.RuleType))"
-        $ruleData.Rules += $rule
+    }
+    
+    Write-Host "Getting automation rules and mappings..."
+    $automationRules = Get-AutomationRules -SubscriptionId $config.azure.subscriptionId -ResourceGroup $config.azure.resourceGroup -WorkspaceName $config.azure.workspaceName
+    
+    Write-Host "Analyzing rules and their data sources..."
+    $analysisResults = @{
+        Rules = $rules
+        Tables = $tables
+        AutomationRules = $automationRules
     }
     
     Write-Host "Generating visualizations..."
@@ -70,28 +67,31 @@ try {
     Write-Verbose "Using output path: $outputPath"
     
     Write-Host "Creating network graph..."
-    $networkGraph = New-NetworkGraph -RuleData $ruleData -Config $config
+    $networkGraph = New-NetworkGraph -RuleData $analysisResults -Config $config
     
     Write-Host "Creating coverage heatmap..."
-    $heatmap = New-CoverageHeatmap -CoverageData $ruleData -Config $config
+    $heatmap = New-CoverageHeatmap -CoverageData $analysisResults -Config $config
     
     Write-Host "Generating reports..."
-    $reports = Export-CoverageReport -AnalysisResults $ruleData -Config $config
+    $reports = Export-CoverageReport -AnalysisResults $analysisResults -Config $config
     Write-Host "Coverage reports created:"
     Write-Host "  HTML Report: $($reports.HtmlReport)"
     Write-Host "  Excel Report: $($reports.ExcelReport)"
     
     # Display summary
-    $activeRules = $ruleData.Rules | Where-Object { $_.Enabled }
-    $activeTables = $ruleData.Tables.Values | Where-Object { $_.IsActive }
-    $staleTables = $ruleData.Tables.Values | Where-Object { -not $_.IsActive }
+    $activeRules = $rules | Where-Object { $_.Enabled }
+    $activeTables = $tables.GetEnumerator() | Where-Object { $_.Value }
+    $staleTables = $tables.GetEnumerator() | Where-Object { -not $_.Value }
+    $activeAutomationRules = $automationRules | Where-Object { $_.Enabled }
     
     Write-Host "`nAnalysis Summary:"
-    Write-Host "Total Rules: $($ruleData.Rules.Count)"
+    Write-Host "Total Rules: $($rules.Count)"
     Write-Host "Active Rules: $($activeRules.Count)"
-    Write-Host "Tables Used: $($ruleData.Tables.Count)"
+    Write-Host "Tables Used: $($tables.Count)"
     Write-Host "Active Tables: $($activeTables.Count)"
     Write-Host "Stale Tables: $($staleTables.Count)"
+    Write-Host "Automation Rules: $($automationRules.Count)"
+    Write-Host "Active Automation Rules: $($activeAutomationRules.Count)"
     
     Write-Host "`nAnalysis completed successfully!"
 }
